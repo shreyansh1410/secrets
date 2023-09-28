@@ -14,3 +14,10 @@ body {
   color: #fff;
   background-color: #000;
 }
+
+.github-col-sm-4{
+  position: relative;
+  left: 775px;
+  top: -150px;
+  width: 350px;
+}

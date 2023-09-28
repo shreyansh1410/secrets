@@ -12,8 +12,8 @@ import session from 'express-session'
 import passport from 'passport';
 import passportLocalMongoose from 'passport-local-mongoose'
 import {Strategy as GoogleStrategy} from 'passport-google-oauth20';
+import { Strategy as GitHubStrategy } from 'passport-github2';
 import findOrCreate from 'mongoose-findorcreate'
-import { parseArgs } from 'util';
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -40,7 +40,8 @@ connect("mongodb://127.0.0.1:27017/userDB");
 const userSchema = new Schema({
     email: String,
     password: String,
-    googleId: String
+    googleId: String,
+    githubId: String
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -75,6 +76,18 @@ passport.use(new GoogleStrategy({
   }
 ));
 
+passport.use(new GitHubStrategy({
+    clientID: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/github/secrets"
+  },
+  function(accessToken, refreshToken, profile, done) {
+    User.findOrCreate({ githubId: profile.id }, function (err, user) {
+      return done(err, user);
+    });
+  }
+));
+
 app.get("/", (req,res) => {
     res.render("home");
 });
@@ -84,11 +97,23 @@ app.route("/auth/google")
     scope:['profile']
 }));
 
+app.route("/auth/github")
+.get(passport.authenticate('github',{
+    scope:['profile']
+}));
+
 app.get("/auth/google/secrets", 
   passport.authenticate('google', { failureRedirect: '/login' }),
   function(req, res) {
     // Successful authentication, redirect home.
     res.redirect("/secrets");
+});
+
+app.get('/auth/github/secrets', 
+  passport.authenticate('github', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect('/secrets');
   });
 
 app.get("/login", (req,res) =>{
@@ -129,9 +154,7 @@ app.post("/register", (req,res) => {
                 res.redirect("/secrets");
             });
         }
-    });
-    
-    
+    });    
 });
 
 app.post("/login", (req,res) => {
