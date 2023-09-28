@@ -1,11 +1,16 @@
 // require('dotenv').config();
 import {} from 'dotenv/config';
-import express from 'express'
+import express from 'express';
+import md5 from 'md5';
 // const express = require ('express')
-import bodyParser from 'body-parser'
+import bodyParser from 'body-parser';
 import { fileURLToPath } from 'url';
-import {connect, Schema, model} from 'mongoose'
-import encrypt from 'mongoose-encryption'
+import {connect, Schema, model} from 'mongoose';
+import encrypt from 'mongoose-encryption';
+
+import bcrypt from 'bcrypt';
+const saltRounds = 10;
+const someOtherPlaintextPassword = 'not_bacon';
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -26,8 +31,8 @@ const userSchema = new Schema({
 })
 
 // console.log(process.env.API_KEY);
-const secret = process.env.SECRET;
-userSchema.plugin(encrypt, {secret: secret, encryptedFields: ['password']});
+// const secret = process.env.SECRET;
+// userSchema.plugin(encrypt, {secret: secret, encryptedFields: ['password']});
 
 const User = new model("User", userSchema);
 
@@ -44,23 +49,18 @@ app.get("/register", (req,res) => {
 });
 
 app.post("/register", (req,res) => {
-    User.findOne({
-        email: req.body.username,
-        password: req.body.password
-    })
-    .then((foundUser) => {
-        if(foundUser === null){
-            item.save()
-            .then(() => res.render("secrets"))
-            .catch((err) => console.log(err));
-        }else{
-            res.redirect("/login");
-        }
-    })
-    const item = new User({
-        email: req.body.username,
-        password: req.body.password
-    });  
+    bcrypt.genSalt(saltRounds, function(err, salt) {
+        bcrypt.hash(req.body.password, salt, function(err, hash) {
+            // Store hash in your password DB.
+            const item = new User({
+                email: req.body.username,
+                password: hash
+            });
+            item.save();
+            res.render("secrets"); 
+        });
+    });
+    
     
 });
 
@@ -71,9 +71,12 @@ app.post("/login", (req,res) => {
     })
     .then((foundUser) => {
         if(foundUser){
-            if(foundUser.password === password){
-                res.render("secrets");
-            }
+            bcrypt.compare(password, foundUser.password, function(err, result) {
+                // result == true
+                if(result === true){
+                    res.render("secrets");
+                }
+            });
         }
     }).catch((err) => {
         console.log(err);
