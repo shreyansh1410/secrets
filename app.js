@@ -41,7 +41,8 @@ const userSchema = new Schema({
     email: String,
     password: String,
     googleId: String,
-    githubId: String
+    githubId: String,
+    secret: String
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -55,13 +56,20 @@ const User = new model("User", userSchema);
 
 passport.use(User.createStrategy());
 
-passport.serializeUser(function(user, done) {
-    done(null, user);
+passport.serializeUser(function(user, cb) {
+    process.nextTick(function() {
+      return cb(null, {
+        id: user.id,
+        username: user.username
+      });
+    });
   });
    
-  passport.deserializeUser(function(user, done) {
-    done(null, user);
-  });
+passport.deserializeUser((user, cb) => {
+    process.nextTick(() => {
+      return cb(null, user);
+    });
+});
 
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
@@ -76,17 +84,17 @@ passport.use(new GoogleStrategy({
   }
 ));
 
-passport.use(new GitHubStrategy({
-    clientID: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: "http://localhost:3000/auth/github/secrets"
-  },
-  function(accessToken, refreshToken, profile, done) {
-    User.findOrCreate({ githubId: profile.id }, function (err, user) {
-      return done(err, user);
-    });
-  }
-));
+// passport.use(new GitHubStrategy({
+//     clientID: process.env.GITHUB_CLIENT_ID,
+//     clientSecret: process.env.GITHUB_CLIENT_SECRET,
+//     callbackURL: "http://localhost:3000/auth/github/secrets"
+//   },
+//   function(accessToken, refreshToken, profile, done) {
+//     User.findOrCreate({ githubId: profile.id }, function (err, user) {
+//       return done(err, user);
+//     });
+//   }
+// ));
 
 app.get("/", (req,res) => {
     res.render("home");
@@ -125,11 +133,38 @@ app.get("/register", (req,res) => {
 });
 
 app.get("/secrets", (req,res) => {
+    // if(req.isAuthenticated()){
+    //     res.render("secrets");
+    // }else{
+    //     res.redirect('/login'); 
+    // }
+    User.find({"secret": {$ne: null}})
+        .then((foundUsers) => {
+            if(foundUsers)
+                res.render("secrets", {usersWithSecrets: foundUsers});
+        })
+        .catch((err) => {
+            console.log(err);
+        });
+});
+
+app.get("/submit", (req,res) => {
     if(req.isAuthenticated()){
-        res.render("secrets");
+        res.render("submit");
     }else{
-        res.redirect('/login'); 
+        res.redirect("/login"); 
     }
+});
+
+app.get("/logout", (req,res) => {
+    req.logout((err) => {
+        if(err){
+            console.log(err);
+            next();
+        }else{
+            res.redirect("/");
+        }
+    });
 });
 
 app.post("/register", (req,res) => {
@@ -184,30 +219,31 @@ app.post("/login", (req,res) => {
             console.log(err);
         }else{
             passport.authenticate("local")(req,res, (err => {
-                res.redirect("/secrets");
+            res.redirect("/secrets");
             }));
         }
     });
 });
 
-app.get("/logout", (req,res) => {
-    req.logout((err) => {
-        if(err){
-            console.log(err);
-            next();
-        }else{
-            res.redirect("/");
-        }
-    });
-});
 
-app.get("/submit", (rqe,res) => {
-    res.render("submit");
-});
-
-app.post("/submit", (req,res) => {
-    
-})
+app.post("/submit", async (req, res) => {
+    try {
+      const submittedSecret = req.body.secret;
+      const userID = req.user.id;
+  
+      const foundUser = await User.findById(userID);
+  
+      if (foundUser) {
+        foundUser.secret = submittedSecret;
+        await foundUser.save();
+        res.redirect("/secrets");
+      }
+    } catch (err) {
+      console.log(err);
+      // Handle the error appropriately (e.g., send an error response)
+    }
+  });
+  
 
 app.listen(port, () => {
     console.log(`the port is running on ${port}`);
