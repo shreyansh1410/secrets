@@ -42,7 +42,7 @@ const userSchema = new Schema({
     password: String,
     googleId: String,
     githubId: String,
-    secret: String
+    secret: Array
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -234,7 +234,7 @@ app.post("/submit", async (req, res) => {
       const foundUser = await User.findById(userID);
   
       if (foundUser) {
-        foundUser.secret = submittedSecret;
+        foundUser.secret.push(submittedSecret);
         await foundUser.save();
         res.redirect("/secrets");
       }
